@@ -1,6 +1,8 @@
 package com.xiaozhi.ai.llm.memory;
 
 import com.xiaozhi.common.model.bo.SummaryBO;
+import com.xiaozhi.ai.knowledge.KnowledgeService;
+import com.xiaozhi.personal.service.LongTermMemoryService;
 
 import lombok.Builder;
 import org.springframework.ai.chat.client.ChatClient;
@@ -47,6 +49,8 @@ public class SummaryConversation extends Conversation {
     private final PromptTemplate againSummarizerPromptTemplate ;
     private final ChatMemory chatMemory;
     private final ChatClient chatClient;
+    private final LongTermMemoryService longTermMemoryService;
+    private final KnowledgeService knowledgeService;
     private final Object summaryLock = new Object();
     // 运行时不应该发生变化，避免计算错误
 
@@ -61,7 +65,8 @@ public class SummaryConversation extends Conversation {
     @Builder
     public SummaryConversation(String ownerId, Integer roleId, String sessionId, String roleDesc, Integer userId,
                                PromptTemplate initSummarizerPromptTemplate, PromptTemplate againSummarizerPromptTemplate,
-                               ChatMemory chatMemory, ChatModel chatModel, int maxMessages, int batchSize){
+                               ChatMemory chatMemory, ChatModel chatModel, int maxMessages, int batchSize,
+                               LongTermMemoryService longTermMemoryService, KnowledgeService knowledgeService){
         super(ownerId, roleId, sessionId, roleDesc, userId);
         Assert.notNull(initSummarizerPromptTemplate, "initSummarizerPromptTemplate must not be null");
         this.initSummarizerPromptTemplate = initSummarizerPromptTemplate;
@@ -77,6 +82,8 @@ public class SummaryConversation extends Conversation {
 
         Assert.notNull(chatMemory, "chatMemory must not be null");
         this.chatMemory = chatMemory;
+        this.longTermMemoryService = longTermMemoryService;
+        this.knowledgeService = knowledgeService;
 
         Assert.notNull(chatModel, "chatModel must not be null");
         this.chatClient = ChatClient.builder(chatModel)
@@ -229,6 +236,21 @@ public class SummaryConversation extends Conversation {
             // 多条SystemMessage在主流模型（OpenAI、Qwen、DeepSeek）中均已验证可用
             historyMessages.add(new SystemMessage("下面是你与用户最近聊天内容的摘要：\n" + summarySnapshot.getSummary()));
         }
+        String latestUserQuery = latestUserQuery(messageSnapshot);
+        if (getUserId() != null && StringUtils.hasText(latestUserQuery)) {
+            String longTermMemory = longTermMemoryService.renderForPrompt(getUserId(), getRoleId(), latestUserQuery);
+            if (StringUtils.hasText(longTermMemory)) {
+                historyMessages.add(new SystemMessage(longTermMemory));
+            }
+            try {
+                String knowledge = knowledgeService.renderForPrompt(getUserId(), getRoleId(), latestUserQuery);
+                if (StringUtils.hasText(knowledge)) {
+                    historyMessages.add(new SystemMessage(knowledge));
+                }
+            } catch (RuntimeException e) {
+                log.warn("[知识库检索] 本轮检索失败，userId={}, roleId={}", getUserId(), getRoleId(), e);
+            }
+        }
         historyMessages.addAll(messageSnapshot);
         // UserMessage 按 metadata 装配带前缀的副本供 LLM 使用
         return historyMessages.stream().map(UserMessageAssembler::assemble).toList();
@@ -237,5 +259,14 @@ public class SummaryConversation extends Conversation {
     @Override
     public List<Message> messages() {
         return messages(ConversationContext.EMPTY);
+    }
+
+    private String latestUserQuery(List<Message> snapshot) {
+        for (int i = snapshot.size() - 1; i >= 0; i--) {
+            if (snapshot.get(i) instanceof UserMessage userMessage) {
+                return userMessage.getText();
+            }
+        }
+        return null;
     }
 }

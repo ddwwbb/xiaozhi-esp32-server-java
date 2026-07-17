@@ -24,6 +24,9 @@ export default {
     delete: '/device',
     export: '/device/export',
   },
+  firmware: {
+    releases: '/firmware/releases',
+  },
   agent: {
     query: '/agent',
   },

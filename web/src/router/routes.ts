@@ -8,6 +8,7 @@ export const ROUTES = {
   FORGET: '/forget',
   DASHBOARD: '/dashboard',
   DEVICE: '/device',
+  FIRMWARE: '/firmware',
   ROLE: '/role',
   TEMPLATE: '/template',
   MEMORY_CHAT: '/memory/chat',

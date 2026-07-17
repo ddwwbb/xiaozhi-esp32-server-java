@@ -8,8 +8,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -60,21 +58,6 @@ public class MessageSender {
         sendTextMessage(session, jsonMessage);
     }
 
-    public void sendIotCommandMessage(ChatSession session, List<Map<String, Object>> commands) {
-        if (session == null || !session.isOpen()) {
-            log.warn("sendIotCommandMessage无法发送消息 - 会话已关闭或为null");
-            return;
-        }
-        ObjectNode messageJson = objectMapper.createObjectNode();
-        messageJson.put("session_id", session.getSessionId());
-        messageJson.put("type", "iot");
-        messageJson.set("commands", objectMapper.valueToTree(commands));
-
-        String jsonMessage = messageJson.toString();
-        log.debug("sendIotCommandMessage发送iot消息 - SessionId: {}, Message: {}", session.getSessionId(), messageJson);
-        sendTextMessage(session, jsonMessage);
-    }
-
     public void sendEmotion(ChatSession session, String emotion) {
         if (session == null || !session.isOpen()) {
             log.warn("sendEmotion无法发送消息 - 会话已关闭或为null");
@@ -88,6 +71,35 @@ public class MessageSender {
         String jsonMessage = messageJson.toString();
         log.info("sendEmotion发送Emotion消息 - SessionId: {}, Message: {}", session.getSessionId(), jsonMessage);
         sendTextMessage(session, jsonMessage);
+    }
+
+    public void sendSystemReboot(ChatSession session) {
+        if (session == null || !session.isOpen()) {
+            log.warn("sendSystemReboot无法发送消息 - 会话已关闭或为null");
+            return;
+        }
+        ObjectNode messageJson = objectMapper.createObjectNode();
+        messageJson.put("session_id", session.getSessionId());
+        messageJson.put("type", "system");
+        messageJson.put("command", "reboot");
+        sendTextMessage(session, messageJson.toString());
+    }
+
+    public void sendAlert(ChatSession session, String status, String message, String emotion) {
+        if (session == null || !session.isOpen()) {
+            log.warn("sendAlert无法发送消息 - 会话已关闭或为null");
+            return;
+        }
+        if (status == null || message == null || emotion == null) {
+            throw new IllegalArgumentException("alert的status、message、emotion不能为空");
+        }
+        ObjectNode messageJson = objectMapper.createObjectNode();
+        messageJson.put("session_id", session.getSessionId());
+        messageJson.put("type", "alert");
+        messageJson.put("status", status);
+        messageJson.put("message", message);
+        messageJson.put("emotion", emotion);
+        sendTextMessage(session, messageJson.toString());
     }
 
     public void sendTextMessage(ChatSession chatSession, String message) {

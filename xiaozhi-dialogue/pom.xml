@@ -16,11 +16,6 @@
             <artifactId>xiaozhi-ai</artifactId>
         </dependency>
         <!-- xiaozhi-common 和 xiaozhi-service 通过 xiaozhi-ai 传递 -->
-        <!-- Netty (WebSocket 服务器) -->
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId>
-        </dependency>
         <!-- Spring WebSocket -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -78,6 +73,11 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

@@ -80,6 +80,8 @@ logging:
 # 小智扩展配置
 # ============================================================
 xiaozhi:
+  websocket:
+    protocol-version: 3
   runtime:
     native-lib-dir: lib
     vosk-model-dir: models/vosk-model

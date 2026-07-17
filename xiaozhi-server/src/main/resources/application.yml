@@ -117,6 +117,14 @@ logging:
 # 小智扩展配置
 # ============================================================
 xiaozhi:
+  firmware:
+    storage-path: data/firmware
+    max-file-size: 16MB
+  # OTA 下发给固件的WebSocket二进制协议版本：1=裸Opus，2=带时间戳帧，3=紧凑帧
+  websocket:
+    protocol-version: 3
+  # 固件server_time协议使用的本地时区偏移，单位为分钟
+  timezone-offset-minutes: 480
   runtime:
     # 生产环境建议改成绝对路径，避免模型目录和原生库目录依赖启动工作目录
     native-lib-dir: lib

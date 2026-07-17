@@ -15,13 +15,28 @@ public class WebSocketSession extends ChatSession {
      */
     protected org.springframework.web.socket.WebSocketSession session;
 
+    private final int protocolVersion;
+
     public WebSocketSession(String sessionId) {
         super(sessionId);
+        this.protocolVersion = WebSocketBinaryProtocol.VERSION_1;
     }
 
     public WebSocketSession(org.springframework.web.socket.WebSocketSession session) {
+        this(session, WebSocketBinaryProtocol.VERSION_1);
+    }
+
+    public WebSocketSession(org.springframework.web.socket.WebSocketSession session, int protocolVersion) {
         super(session.getId());
+        if (!WebSocketBinaryProtocol.isSupported(protocolVersion)) {
+            throw new IllegalArgumentException("不支持的WebSocket协议版本: " + protocolVersion);
+        }
         this.session = session;
+        this.protocolVersion = protocolVersion;
+    }
+
+    public int getProtocolVersion() {
+        return protocolVersion;
     }
 
     @Override
@@ -66,7 +81,8 @@ public class WebSocketSession extends ChatSession {
     @Override
     public void sendBinaryMessage(byte[] message) {
         try {
-            session.sendMessage(new BinaryMessage(message));
+            byte[] frame = WebSocketBinaryProtocol.encode(protocolVersion, message);
+            session.sendMessage(new BinaryMessage(frame));
         } catch (IOException e) {
             log.error("发送Binary消息失败", e);
         }

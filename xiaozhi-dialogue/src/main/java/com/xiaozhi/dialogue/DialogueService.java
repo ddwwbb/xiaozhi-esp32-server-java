@@ -7,9 +7,12 @@ import com.xiaozhi.common.model.bo.DeviceBO;
 import com.xiaozhi.common.model.bo.MessageBO;
 import com.xiaozhi.dialogue.audio.VadService;
 import com.xiaozhi.dialogue.llm.factory.PersonaFactory;
+import com.xiaozhi.dialogue.metrics.TurnMetricsRecorder;
 import com.xiaozhi.ai.llm.memory.MessageTimeMetadata;
 import com.xiaozhi.ai.llm.service.IntentService;
 import com.xiaozhi.ai.stt.SttResult;
+import com.xiaozhi.ai.voiceprint.SpeakerRecognitionService;
+import com.xiaozhi.personal.service.VoiceProfileService;
 import com.xiaozhi.common.model.bo.MessageMetadataBO;
 import org.springframework.ai.chat.messages.UserMessage;
 import com.xiaozhi.dialogue.audio.VadService.VadStatus;
@@ -70,6 +73,12 @@ public class DialogueService{
     @Resource
     private StorageServiceFactory storageServiceFactory;
 
+    @Resource
+    private TurnMetricsRecorder turnMetricsRecorder;
+
+    @Resource
+    private SpeakerRecognitionService speakerRecognitionService;
+
     @org.springframework.context.event.EventListener
     public void onApplicationEvent(ChatAbortedEvent event) {
         ChatSession chatSession = sessionManager.getSession(event.getSessionId());
@@ -111,14 +120,14 @@ public class DialogueService{
             // 根据VAD状态处理
             switch (vadResult.getStatus()) {
                 case SPEECH_START:
-                    // 先启动STT（同步创建音频流），确保流已准备好
-                    startStt(session, sessionId, vadResult.getProcessedData());
-                    // 再触发abort停止当前播放中的TTS
                     // 通过Persona.isActive()综合判断整个管道是否活跃（LLM/TTS/Player任一层）
                     Persona persona = session.getPersona();
                     if (persona != null && persona.isActive()) {
                         abortDialogue(session, ABORT_REASON_VAD);
                     }
+                    // 旧轮播放停止后再创建新轮指标，避免旧 Player.sendStop 提前结束新轮指标
+                    turnMetricsRecorder.start(session);
+                    startStt(session, sessionId, vadResult.getProcessedData());
                     break;
 
                 case SPEECH_CONTINUE:
@@ -168,19 +177,23 @@ public class DialogueService{
                 }
 
                 if (session.getAudioSinks() == null) {
+                    turnMetricsRecorder.fail(sessionId, "AUDIO_STREAM_MISSING");
                     return;
                 }
 
                 Persona persona = session.getPersona();
                 if (persona == null || persona.getSttService() == null) {
+                    turnMetricsRecorder.fail(sessionId, "STT_NOT_CONFIGURED");
                     return;
                 }
 
                 var sttResult = persona.getSttService().stream(session.getAudioSinks().asFlux());
 
                 if (sttResult == null || !StringUtils.hasText(sttResult.text())) {
+                    turnMetricsRecorder.fail(sessionId, "EMPTY_STT");
                     return;
                 }
+                turnMetricsRecorder.sttCompleted(sessionId);
 
                 // 发送STT识别结果到设备
                 persona.getPlayer().sendStt(sttResult.text());
@@ -193,11 +206,14 @@ public class DialogueService{
                 Instant userInstant = Instant.now();
                 Path userAudioPath = session.getAudioPath(MessageBO.SENDER_USER, userInstant);
                 session.setUserAudioPath(userAudioPath);
-                saveUserAudio(session, userAudioPath);
+                byte[] pcmData = saveUserAudio(session, userAudioPath);
+                VoiceProfileService.MatchResult speaker = speakerRecognitionService.identify(
+                        session.getDevice().getUserId(), pcmData);
 
-                handleText(session, sttResult);
+                handleText(session, sttResult, speaker);
 
             } catch (Exception e) {
+                turnMetricsRecorder.fail(sessionId, "STT_ERROR");
                 log.error("流式识别错误: {}", e.getMessage(), e);
             }
         });
@@ -230,12 +246,17 @@ public class DialogueService{
      * @param sttResult STT结果（纯文本使用 SttResult.textOnly() 包装）
      */
     public void handleText(ChatSession session, SttResult sttResult) {
+        handleText(session, sttResult, VoiceProfileService.MatchResult.unknownResult());
+    }
+
+    private void handleText(ChatSession session, SttResult sttResult,
+                            VoiceProfileService.MatchResult speaker) {
         try {
             Persona persona = session.getPersona();
 
             String text = sttResult.text();
 
-            UserMessage userMessage = buildUserMessage(text, sttResult);
+            UserMessage userMessage = buildUserMessage(text, sttResult, speaker);
 
             // 意图检测
             if (intentService.detect(text) == IntentService.Intent.EXIT) {
@@ -251,6 +272,7 @@ public class DialogueService{
             }
 
         } catch (Exception e) {
+            turnMetricsRecorder.fail(session.getSessionId(), "DIALOGUE_ERROR");
             log.error("处理文本失败: {}", e.getMessage(), e);
         }
     }
@@ -263,15 +285,20 @@ public class DialogueService{
      * @param text     用户裸文本
      * @param sttResult STT 结果，可能含情绪信息
      */
-    private static UserMessage buildUserMessage(String text, SttResult sttResult) {
+    private static UserMessage buildUserMessage(String text, SttResult sttResult,
+                                                VoiceProfileService.MatchResult speaker) {
         MessageMetadataBO metadataBO = MessageMetadataBO.builder()
                 .emotion(sttResult.hasEmotion() ? sttResult.emotion() : null)
                 .emotionScore(sttResult.hasEmotion() ? sttResult.emotionScore() : null)
                 .emotionDegree(sttResult.hasEmotion() ? sttResult.emotionDegree() : null)
+                .speakerProfileId(speaker != null && !speaker.unknown() ? speaker.profileId() : null)
+                .speakerName(speaker != null && !speaker.unknown() ? speaker.displayName() : null)
+                .speakerScore(speaker != null && !speaker.unknown() ? speaker.score() : null)
+                .speakerModel(speaker != null && !speaker.unknown() ? "sherpa-onnx" : null)
                 .build();
         Map<String, Object> msgMeta = new HashMap<>();
         // 只要任一字段有值就挂载；全空时不挂，保持 UserMessage.metadata 干净
-        if (StringUtils.hasText(metadataBO.getEmotion())) {
+        if (StringUtils.hasText(metadataBO.getEmotion()) || StringUtils.hasText(metadataBO.getSpeakerName())) {
             msgMeta.put(MessageMetadataBO.METADATA_KEY, metadataBO);
         }
         UserMessage userMessage = UserMessage.builder().text(text).metadata(msgMeta).build();
@@ -351,11 +378,11 @@ public class DialogueService{
     /**
      * 保存用户音频数据为WAV文件
      */
-    private void saveUserAudio(ChatSession session, Path path) {
+    private byte[] saveUserAudio(ChatSession session, Path path) {
         List<byte[]> pcmFrames = vadService.getPcmData(session.getSessionId());
         byte[] fullPcmData = AudioUtils.joinPcmFrames(pcmFrames);
         if (fullPcmData.length == 0) {
-            return;
+            return fullPcmData;
         }
         AudioUtils.saveAsWav(path, fullPcmData);
         log.debug("用户音频已保存: {}", path);
@@ -366,6 +393,7 @@ public class DialogueService{
         } catch (Exception e) {
             log.warn("上传用户音频失败，保留本地路径: {}", path, e);
         }
+        return fullPcmData;
     }
 
 }

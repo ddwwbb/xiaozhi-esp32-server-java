@@ -7,6 +7,7 @@ import com.xiaozhi.ai.llm.memory.Conversation;
 import com.xiaozhi.ai.llm.memory.ConversationContext;
 import com.xiaozhi.dialogue.playback.Player;
 import com.xiaozhi.dialogue.playback.Synthesizer;
+import com.xiaozhi.dialogue.metrics.TurnMetricsRecorder;
 import com.xiaozhi.ai.stt.SttService;
 import lombok.Builder;
 import lombok.Getter;
@@ -78,6 +79,8 @@ public class Persona {
      * 与LLM Provider通信的具体实现类
      */
     private ChatModel chatModel;
+    private TurnMetricsRecorder turnMetricsRecorder;
+    private String llmProvider;
     private GoodbyeMessageSupplier goodbyeMessages;
 
     @Getter
@@ -148,20 +151,32 @@ public class Persona {
         List<Message> messages = conversation.messages(ctx);
         Prompt prompt = new Prompt(messages, chatOptions);
 
+        if (turnMetricsRecorder != null) {
+            turnMetricsRecorder.llmStarted(sessionId, llmProvider);
+        }
         Flux<ChatResponse> chatFlux = chatModel.stream(prompt)
             .doOnError(error -> {
+                if (turnMetricsRecorder != null) {
+                    turnMetricsRecorder.fail(sessionId, "LLM_ERROR");
+                }
                 listener.onError(error);
             });
         chatFlux = chatFlux.doOnNext(chatResponse -> {
             Instant assistantMessageCreatedAt = Instant.now();
             boolean isFirst = ttft.compareAndSet(null, assistantMessageCreatedAt);
             if (isFirst) {
+                if (turnMetricsRecorder != null) {
+                    turnMetricsRecorder.firstToken(sessionId);
+                }
                 if (player.getOpusRecorder() != null) {
                     player.getOpusRecorder().setAssistantMessageCreatedAt(assistantMessageCreatedAt);
                 }
             }
         });
         return new MessageAggregator().aggregate(chatFlux, chatResponse -> {
+            if (turnMetricsRecorder != null) {
+                turnMetricsRecorder.llmCompleted(sessionId);
+            }
             var toolCallDetails = getSession().drainToolCallDetails();
             // 从 DialogueContext 中获取模型真实调用的工具调用链中间消息
             AssistantMessage toolCallAssistantMsg = getSession().getDialogueContext().drainToolCallAssistantMessage();

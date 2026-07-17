@@ -6,6 +6,7 @@ import com.xiaozhi.common.model.req.DevicePageReq;
 import com.xiaozhi.common.model.req.DeviceUpdateReq;
 import com.xiaozhi.common.model.resp.DeviceResp;
 import com.xiaozhi.common.model.resp.PageResp;
+import com.xiaozhi.common.model.resp.OtaResponse;
 import com.xiaozhi.common.web.ResultStatus;
 import com.xiaozhi.device.DeviceAppService;
 import org.junit.jupiter.api.BeforeEach;
@@ -116,6 +117,53 @@ class DeviceControllerTest extends ControllerTestSupport {
                 .content("{}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("设备ID不正确"));
+    }
+
+    @Test
+    void otaReturnsFirmwareNativeContractWithoutFakeFirmware() throws Exception {
+        var response = new OtaResponse(
+                null,
+                new OtaResponse.Websocket("ws://127.0.0.1/ws/xiaozhi/v1/", "", 3),
+                new OtaResponse.ServerTime(1_700_000_000_000L, 480),
+                null);
+        when(deviceAppService.handleOta(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/device/ota")
+                .header("Device-Id", "AA:BB:CC:DD:EE:FF")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.websocket.version").value(3))
+            .andExpect(jsonPath("$.websocket.url").value("ws://127.0.0.1/ws/xiaozhi/v1/"))
+            .andExpect(jsonPath("$.server_time.timestamp").value(1_700_000_000_000L))
+            .andExpect(jsonPath("$.firmware").doesNotExist())
+            .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void otaReturnsMatchingFirmwareInNativeContract() throws Exception {
+        var response = new OtaResponse(
+                null,
+                new OtaResponse.Websocket("ws://127.0.0.1/ws/xiaozhi/v1/", "", 3),
+                new OtaResponse.ServerTime(1_700_000_000_000L, 480),
+                new OtaResponse.Firmware(
+                        "1.6.1",
+                        "http://127.0.0.1:8091/api/device/firmware/9/download",
+                        0));
+        when(deviceAppService.handleOta(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/device/ota")
+                .header("Device-Id", "AA:BB:CC:DD:EE:FF")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"board":{"type":"atk-dnesp32s3-box2-wifi"},"application":{"version":"1.6.0"}}
+                        """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.firmware.version").value("1.6.1"))
+            .andExpect(jsonPath("$.firmware.url").value(
+                    "http://127.0.0.1:8091/api/device/firmware/9/download"))
+            .andExpect(jsonPath("$.firmware.force").value(0))
+            .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     @Test

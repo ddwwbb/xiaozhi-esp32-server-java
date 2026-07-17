@@ -36,7 +36,6 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) {
         Map<String, String> headers = getHeadersFromSession(session);
         String deviceIdAuth = headers.get("device-id");
-        String token = headers.get("Authorization");
         if (deviceIdAuth == null || deviceIdAuth.isEmpty()) {
             log.error("设备ID为空");
             try {
@@ -47,12 +46,23 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
             return;
         }
 
+        int protocolVersion;
+        try {
+            protocolVersion = parseProtocolVersion(headers.get("protocol-version"));
+        } catch (IllegalArgumentException e) {
+            log.warn("拒绝不支持的WebSocket协议版本 - SessionId: {}, Protocol-Version: {}",
+                    session.getId(), headers.get("protocol-version"));
+            closeBadData(session, e.getMessage());
+            return;
+        }
+
         com.xiaozhi.communication.server.websocket.WebSocketSession xiaoZhiSession
-                = new com.xiaozhi.communication.server.websocket.WebSocketSession(session);
+                = new com.xiaozhi.communication.server.websocket.WebSocketSession(session, protocolVersion);
         messageHandler.afterConnection(xiaoZhiSession, deviceIdAuth);
         sessionManager.openAudioChannel(xiaoZhiSession.getSessionId(), deviceIdAuth);
 
-        log.info("WebSocket连接建立成功 - SessionId: {}, DeviceId: {}", session.getId(), deviceIdAuth);
+        log.info("WebSocket连接建立成功 - SessionId: {}, DeviceId: {}, Protocol-Version: {}",
+                session.getId(), deviceIdAuth, protocolVersion);
     }
 
     @Override
@@ -96,7 +106,19 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
         if (chatSession == null || chatSession.getDevice() == null) {
             return;
         }
-        messageHandler.handleBinaryMessage(sessionId, message.getPayload().array());
+        if (!(chatSession instanceof com.xiaozhi.communication.server.websocket.WebSocketSession websocketSession)) {
+            log.error("WebSocket会话类型错误 - SessionId: {}", sessionId);
+            closeBadData(session, "WebSocket会话类型错误");
+            return;
+        }
+        try {
+            var audioFrame = WebSocketBinaryProtocol.decode(
+                    websocketSession.getProtocolVersion(), message.getPayload());
+            messageHandler.handleBinaryMessage(sessionId, audioFrame.payload());
+        } catch (IllegalArgumentException e) {
+            log.warn("收到非法WebSocket二进制帧 - SessionId: {}, 原因: {}", sessionId, e.getMessage());
+            closeBadData(session, e.getMessage());
+        }
     }
 
     @Override
@@ -177,7 +199,7 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
 
     private Map<String, String> getHeadersFromSession(WebSocketSession session) {
         // 尝试从请求头获取设备ID
-        String[] deviceKeys = { "device-id", "mac_address", "uuid", "Authorization" };
+        String[] deviceKeys = { "device-id", "mac_address", "uuid", "Authorization", "protocol-version" };
 
         Map<String, String> headers = new HashMap<>();
 
@@ -204,5 +226,28 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
             }
         }
         return headers;
+    }
+
+    private int parseProtocolVersion(String value) {
+        if (value == null || value.isBlank()) {
+            return WebSocketBinaryProtocol.VERSION_1;
+        }
+        try {
+            int version = Integer.parseInt(value);
+            if (!WebSocketBinaryProtocol.isSupported(version)) {
+                throw new IllegalArgumentException("不支持的WebSocket协议版本: " + value);
+            }
+            return version;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("非法WebSocket协议版本: " + value, e);
+        }
+    }
+
+    private void closeBadData(WebSocketSession session, String reason) {
+        try {
+            session.close(CloseStatus.BAD_DATA.withReason(reason));
+        } catch (IOException e) {
+            log.error("关闭WebSocket连接失败 - SessionId: {}", session.getId(), e);
+        }
     }
 }

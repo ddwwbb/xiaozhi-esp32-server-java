@@ -26,6 +26,7 @@ import com.xiaozhi.ai.tool.ToolRegistrationService;
 import com.xiaozhi.dialogue.adapter.ChatSessionToolAdapter;
 import com.xiaozhi.config.service.ConfigService;
 import com.xiaozhi.dialogue.llm.handler.DialogueListener;
+import com.xiaozhi.dialogue.metrics.TurnMetricsRecorder;
 import com.xiaozhi.message.service.MessageService;
 import com.xiaozhi.storage.service.StorageServiceFactory;
 import jakarta.annotation.Resource;
@@ -69,6 +70,8 @@ public class PersonaFactory {
     private DialogueListener dialogueListener;
     @Resource
     private StorageServiceFactory storageServiceFactory;
+    @Resource
+    private TurnMetricsRecorder turnMetricsRecorder;
 
     /**
      * 构建完整的 Persona 实例。
@@ -96,6 +99,10 @@ public class PersonaFactory {
             player.setOpusRecorder(new OpusRecorder(session, chatMessageService, aecService, storageServiceFactory));
             session.setPlayer(player);
         }
+        ConfigBO ttsConfig = role.getTtsId() != null && role.getTtsId() > 0
+                ? configService.getBO(role.getTtsId()) : null;
+        player.setTurnMetricsRecorder(turnMetricsRecorder);
+        player.setMetricsTtsProvider(ttsConfig != null ? ttsConfig.getProvider() : "edge");
         // 初始化Conversation(相当于角色的记忆）
         String ownerId = device.getDeviceId();
         Integer userId = device.getUserId();
@@ -112,6 +119,8 @@ public class PersonaFactory {
 
         // 获取ChatModel
         ChatModel chatModel = chatModelFactory.getChatModel(role);
+        ConfigBO llmConfig = role.getModelId() != null && role.getModelId() > 0
+                ? configService.getBO(role.getModelId()) : null;
 
         // MCP/IoT 工具已注册完毕，获取完整的工具列表传给 Persona
         var toolCallbacks = session.getToolCallbacks();
@@ -122,6 +131,8 @@ public class PersonaFactory {
                 .conversation(conversation)
                 .sttService(sttService)
                 .chatModel(chatModel)
+                .turnMetricsRecorder(turnMetricsRecorder)
+                .llmProvider(llmConfig != null ? llmConfig.getProvider() : null)
                 .synthesizer(synthesizer)
                 .player(session.getPlayer())
                 .toolCallbacks(toolCallbacks)

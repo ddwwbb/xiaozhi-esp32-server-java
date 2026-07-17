@@ -10,7 +10,7 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 /**
  * ChatSession 到 ToolSession 的适配器。
  * 隔离 ai 层与通信层，ai 层只能访问工具调用相关的方法，
- * 看不到 audioSinks、DeviceState、IotDescriptor 等通信层细节。
+ * 看不到 audioSinks、DeviceState 等通信层细节。
  */
 public class ChatSessionToolAdapter implements ToolSession {
 

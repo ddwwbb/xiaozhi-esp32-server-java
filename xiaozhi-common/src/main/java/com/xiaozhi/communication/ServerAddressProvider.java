@@ -33,11 +33,17 @@ public class ServerAddressProvider {
     @Value("${xiaozhi.dialogue.port:8092}")
     private int dialoguePort;
 
+    @Value("${xiaozhi.websocket.protocol-version:3}")
+    private int websocketProtocolVersion;
+
     @Value("${xiaozhi.server.domain:}")
     private String domain;
 
     @PostConstruct
     private void initializeAddresses() {
+        if (!isSupportedWebsocketProtocolVersion(websocketProtocolVersion)) {
+            throw new IllegalStateException("xiaozhi.websocket.protocol-version仅支持1、2、3");
+        }
         if (domain != null && !domain.isEmpty()) {
             udpAddress = "udp." + domain;
             websocketAddress = "wss://ws." + domain + WS_PATH;
@@ -84,5 +90,13 @@ public class ServerAddressProvider {
 
     public int getDialoguePort() {
         return dialoguePort;
+    }
+
+    public int getWebsocketProtocolVersion() {
+        return websocketProtocolVersion;
+    }
+
+    private boolean isSupportedWebsocketProtocolVersion(int version) {
+        return version >= 1 && version <= 3;
     }
 }

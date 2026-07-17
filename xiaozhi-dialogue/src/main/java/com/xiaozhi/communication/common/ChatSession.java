@@ -1,6 +1,5 @@
 package com.xiaozhi.communication.common;
 
-import com.xiaozhi.communication.domain.iot.IotDescriptor;
 import com.xiaozhi.common.model.bo.DeviceBO;
 import com.xiaozhi.common.model.bo.MessageBO;
 import com.xiaozhi.ai.tool.ToolsSessionHolder;
@@ -22,8 +21,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -44,11 +41,6 @@ public abstract class ChatSession {
      * 内部实现细节，外部通过本类的直通方法访问。
      */
     private DialogueContext dialogueContext;
-
-    /**
-     * 设备iot信息
-     */
-    protected Map<String, IotDescriptor> iotDescriptors = new ConcurrentHashMap<>();
 
     /**
      * 设备服务端状态机。

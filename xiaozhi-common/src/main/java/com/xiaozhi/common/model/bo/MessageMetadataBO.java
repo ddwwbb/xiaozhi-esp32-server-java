@@ -49,4 +49,16 @@ public class MessageMetadataBO {
      * 情绪强度（弱/中/强 等），仅情感识别时有值。
      */
     private String emotionDegree;
+
+    /** 匹配到的声纹档案 ID；未知说话人时为空。 */
+    private Long speakerProfileId;
+
+    /** 匹配到的说话人显示名。 */
+    private String speakerName;
+
+    /** 说话人余弦相似度。 */
+    private Double speakerScore;
+
+    /** 生成该声纹向量的模型版本。 */
+    private String speakerModel;
 }

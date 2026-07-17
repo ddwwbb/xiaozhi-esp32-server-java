@@ -11,6 +11,7 @@ import com.xiaozhi.common.model.req.DeviceUpdateReq;
 import com.xiaozhi.common.model.req.OtaReq;
 import com.xiaozhi.common.model.resp.DeviceResp;
 import com.xiaozhi.common.model.resp.PageResp;
+import com.xiaozhi.common.model.resp.OtaResponse;
 import com.xiaozhi.communication.ServerAddressProvider;
 import com.xiaozhi.communication.registry.DialogueServerInfo;
 import com.xiaozhi.communication.registry.DialogueServerRegistry;
@@ -19,6 +20,7 @@ import com.xiaozhi.device.domain.Device;
 import com.xiaozhi.device.domain.repository.DeviceRepository;
 import com.xiaozhi.device.domain.vo.VerifyCode;
 import com.xiaozhi.device.service.DeviceService;
+import com.xiaozhi.firmware.FirmwareAppService;
 import com.xiaozhi.role.service.RoleService;
 import com.xiaozhi.utils.CmsUtils;
 import com.xiaozhi.utils.CommonUtils;
@@ -32,6 +34,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.time.Instant;
+import java.time.Clock;
 
 import lombok.extern.slf4j.Slf4j;
 /**
@@ -65,6 +69,15 @@ public class DeviceAppService {
 
     @Resource
     private DialogueServerRegistry dialogueServerRegistry;
+
+    @Resource
+    private FirmwareAppService firmwareAppService;
+
+    @Resource
+    private Clock clock;
+
+    @Value("${xiaozhi.timezone-offset-minutes:480}")
+    private int timezoneOffsetMinutes;
 
 
     public PageResp<DeviceResp> page(DevicePageReq req, Integer userId) {
@@ -199,7 +212,7 @@ public class DeviceAppService {
      * @throws IllegalArgumentException 设备ID不正确
      * @throws IllegalStateException    生成验证码失败等内部错误
      */
-    public Map<String, Object> handleOta(OtaReq req) {
+    public OtaResponse handleOta(OtaReq req) {
         // --- IP 地理位置解析 ---
         if (StringUtils.hasText(req.getIp())) {
             var ipInfo = CmsUtils.getIPInfoByAddress(req.getIp());
@@ -214,17 +227,9 @@ public class DeviceAppService {
 
         String deviceId = req.getDeviceId();
         DeviceResp boundDevice = getResp(deviceId);
-        Map<String, Object> otaResponse = new HashMap<>();
-
-        // --- 固件信息 ---
-        Map<String, Object> firmwareInfo = new HashMap<>();
-        firmwareInfo.put("url", serverAddressProvider.getOtaAddress());
-        firmwareInfo.put("version", "1.0.0");
-        otaResponse.put("firmware", firmwareInfo);
-        otaResponse.put("server_time", Map.of(
-            "timestamp", System.currentTimeMillis(),
-            "timezone_offset", 480
-        ));
+        OtaResponse.ServerTime serverTime = new OtaResponse.ServerTime(
+                Instant.now(clock).toEpochMilli(), timezoneOffsetMinutes);
+        OtaResponse.Firmware firmware = firmwareAppService.findUpdate(req.getType(), req.getVersion());
 
         if (boundDevice == null) {
             // --- 未绑定设备：生成验证码 ---
@@ -232,11 +237,9 @@ public class DeviceAppService {
             if (codeResult == null || !StringUtils.hasText(codeResult.getCode())) {
                 throw new IllegalStateException("生成验证码失败");
             }
-            otaResponse.put("activation", Map.of(
-                "code", codeResult.getCode(),
-                "message", codeResult.getCode(),
-                "challenge", deviceId
-            ));
+            OtaResponse.Activation activation = new OtaResponse.Activation(
+                    codeResult.getCode(), codeResult.getCode(), deviceId, null);
+            return new OtaResponse(activation, null, serverTime, firmware);
         } else {
             // --- 已绑定设备：返回通信地址 ---
             DialogueServerInfo selectedServer = null;
@@ -247,10 +250,8 @@ public class DeviceAppService {
             }
             String websocketAddress = selectedServer != null ? selectedServer.getWebsocketAddress() : serverAddressProvider.getWebsocketAddress();
 
-            Map<String, Object> websocketData = new HashMap<>();
-            websocketData.put("url", websocketAddress);
-            websocketData.put("token", "");
-            otaResponse.put("websocket", websocketData);
+            OtaResponse.Websocket websocket = new OtaResponse.Websocket(
+                    websocketAddress, "", serverAddressProvider.getWebsocketProtocolVersion());
 
             // --- 同步设备信息 ---
             DeviceBO syncData = new DeviceBO();
@@ -267,9 +268,8 @@ public class DeviceAppService {
             } catch (RuntimeException e) {
                 log.warn("同步设备信息失败，不影响OTA返回, deviceId={}", deviceId, e);
             }
+            return new OtaResponse(null, websocket, serverTime, firmware);
         }
-
-        return otaResponse;
     }
 
     /**

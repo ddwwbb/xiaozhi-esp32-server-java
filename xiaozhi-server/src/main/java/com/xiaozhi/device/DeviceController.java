@@ -24,6 +24,7 @@ import com.xiaozhi.common.model.req.DeviceCreateReq;
 import com.xiaozhi.common.model.req.DevicePageReq;
 import com.xiaozhi.common.model.req.DeviceUpdateReq;
 import com.xiaozhi.common.model.req.OtaReq;
+import com.xiaozhi.common.model.resp.OtaResponse;
 import com.xiaozhi.common.web.ApiResponse;
 import com.xiaozhi.utils.JsonUtil;
 import com.xiaozhi.utils.RequestContextUtils;
@@ -129,7 +130,7 @@ public class DeviceController extends BaseController {
         HttpServletRequest request) {
         try {
             OtaReq otaReq = parseOtaRequest(deviceIdHeader, requestBody, request);
-            Map<String, Object> otaResponse = deviceAppService.handleOta(otaReq);
+            OtaResponse otaResponse = deviceAppService.handleOta(otaReq);
             return buildJsonResponse(HttpStatus.OK, otaResponse);
         } catch (IllegalArgumentException e) {
             return buildJsonResponse(HttpStatus.BAD_REQUEST, Map.of("error", e.getMessage()));

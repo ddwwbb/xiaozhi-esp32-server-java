@@ -35,6 +35,15 @@ public class RuntimePathConfig {
     /** 头像目录 */
     private String avatarDir = "avatar";
 
+    /** 个人知识库原文件目录 */
+    private String knowledgeDir = "data/knowledge";
+
+    /** 声纹与音色克隆私有样本目录 */
+    private String voiceSampleDir = "data/voice-samples";
+
+    /** 说话人嵌入 ONNX 模型；为空时声纹自动识别不启用 */
+    private String speakerEmbeddingModel = "";
+
     @PostConstruct
     void initStaticPaths() {
         AudioUtils.AUDIO_PATH = audioDir;
@@ -62,5 +71,19 @@ public class RuntimePathConfig {
 
     public Path resolveAvatarDir() {
         return Path.of(avatarDir).toAbsolutePath().normalize();
+    }
+
+    public Path resolveKnowledgeDir() {
+        return Path.of(knowledgeDir).toAbsolutePath().normalize();
+    }
+
+    public Path resolveVoiceSampleDir() {
+        return Path.of(voiceSampleDir).toAbsolutePath().normalize();
+    }
+
+    public Path resolveSpeakerEmbeddingModel() {
+        return speakerEmbeddingModel == null || speakerEmbeddingModel.isBlank()
+                ? null
+                : Path.of(speakerEmbeddingModel).toAbsolutePath().normalize();
     }
 }

@@ -16,7 +16,6 @@ import com.xiaozhi.dialogue.llm.factory.PersonaFactory;
 import com.xiaozhi.ai.llm.factory.ChatModelFactory;
 import com.xiaozhi.ai.tool.ToolsGlobalRegistry;
 import com.xiaozhi.ai.tool.ToolsSessionHolder;
-import com.xiaozhi.dialogue.llm.tool.device.IotService;
 import com.xiaozhi.dialogue.audio.VadService;
 import com.xiaozhi.dialogue.playback.Player;
 import com.xiaozhi.dialogue.playback.ScheduledPlayer;
@@ -56,9 +55,6 @@ public class MessageHandler {
 
     @Resource
     private DialogueService dialogueService;
-
-    @Resource
-    private IotService iotService;
 
     @Resource
     private TtsServiceFactory ttsFactory;
@@ -423,23 +419,6 @@ public class MessageHandler {
         applicationContext.publishEvent(new ChatAbortedEvent(this, session.getSessionId(), deviceId, message.getReason()));
     }
 
-    private void handleIotMessage(ChatSession chatSession, IotMessage message) {
-        String sessionId = chatSession.getSessionId();
-        // 处理设备描述信息
-        if (message.getDescriptors() != null) {
-            log.info("收到IoT设备描述信息 - SessionId: {}: {}", sessionId, message.getDescriptors());
-            // 处理设备描述信息的逻辑
-            iotService.handleDeviceDescriptors(sessionId, message.getDescriptors());
-        }
-
-        // 处理设备状态更新
-        if (message.getStates() != null) {
-            log.info("收到IoT设备状态更新 - SessionId: {}: {}", sessionId, message.getStates());
-            // 处理设备状态更新的逻辑
-            iotService.handleDeviceStates(sessionId, message.getStates());
-        }
-    }
-
     private void handleGoodbyeMessage(ChatSession session, GoodbyeMessage message) {
         // 检查会话是否已经关闭，避免重复处理
         if (!session.isAudioChannelOpen()) {
@@ -471,7 +450,6 @@ public class MessageHandler {
         var chatSession = sessionManager.getSession(sessionId);
         switch (msg) {
             case ListenMessage m -> handleListenMessage(chatSession, m);
-            case IotMessage m -> handleIotMessage(chatSession, m);
             case AbortMessage m -> handleAbortMessage(chatSession, m);
             case GoodbyeMessage m -> handleGoodbyeMessage(chatSession, m);
             case DeviceMcpMessage m -> handleDeviceMcpMessage(chatSession, m);

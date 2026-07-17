@@ -1,0 +1,54 @@
+# 与 docker-compose.yml 叠加使用：
+# docker compose -f docker-compose.yml -f docker-compose-personal.yml up -d
+services:
+  server:
+    environment:
+      SPRING_PROFILES_ACTIVE: personal
+      FIRMWARE_STORAGE_PATH: /app/data/firmware
+      JAVA_OPTS: -Xms128m -Xmx512m
+    volumes:
+      - firmware_data:/app/data/firmware
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  dialogue:
+    environment:
+      SPRING_PROFILES_ACTIVE: personal
+      JAVA_OPTS: -Xms256m -Xmx1024m
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1280M
+        reservations:
+          cpus: "0.25"
+          memory: 384M
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+
+  mysql:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 768M
+        reservations:
+          cpus: "0.2"
+          memory: 256M
+
+volumes:
+  firmware_data:

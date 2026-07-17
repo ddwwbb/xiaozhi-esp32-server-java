@@ -5,6 +5,7 @@ import com.xiaozhi.common.Speech;
 import com.xiaozhi.communication.common.ChatSession;
 import com.xiaozhi.communication.message.MessageSender;
 import com.xiaozhi.enums.DeviceState;
+import com.xiaozhi.dialogue.metrics.TurnMetricsRecorder;
 import com.xiaozhi.utils.AudioUtils;
 import com.xiaozhi.utils.OpusProcessor;
 import io.jsonwebtoken.lang.Assert;
@@ -67,6 +68,11 @@ public abstract class Player {
     @Setter
     @Getter
     private OpusRecorder opusRecorder;
+    @Setter
+    private TurnMetricsRecorder turnMetricsRecorder;
+    @Setter
+    private String metricsTtsProvider;
+    private final AtomicBoolean metricsFirstAudio = new AtomicBoolean();
 
     /**
      * 音频播放器构造方法
@@ -88,6 +94,10 @@ public abstract class Player {
      * 发送TTS开始消息
      */
     protected void sendStart() {
+        metricsFirstAudio.set(false);
+        if (turnMetricsRecorder != null) {
+            turnMetricsRecorder.ttsStarted(session.getSessionId(), metricsTtsProvider);
+        }
         if (opusRecorder != null) {
             opusRecorder.onSendStart();
         }
@@ -107,6 +117,9 @@ public abstract class Player {
      * 发送Opus帧数据
      */
     protected void sendOpusFrame( byte[] opusFrame)  {
+        if (turnMetricsRecorder != null && metricsFirstAudio.compareAndSet(false, true)) {
+            turnMetricsRecorder.firstAudio(session.getSessionId());
+        }
         messageService.sendBinaryMessage(session, opusFrame);
         // log.info("发送Opus帧数据: {}", opusFrame.length);
         if (opusRecorder != null) {
@@ -131,6 +144,9 @@ public abstract class Player {
                 opusRecorder.onSendStop();
             }
             messageService.sendTtsMessage(session, null, "stop");
+            if (turnMetricsRecorder != null) {
+                turnMetricsRecorder.complete(session.getSessionId());
+            }
             isPlaying = false;
             // tts stop 下发后设备切换到聆听状态，服务端同步为 LISTENING
             session.transitionTo(DeviceState.LISTENING);

@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import com.xiaozhi.common.model.bo.RoleBO;
+import com.xiaozhi.ai.knowledge.KnowledgeService;
+import com.xiaozhi.personal.service.LongTermMemoryService;
 
 import lombok.extern.slf4j.Slf4j;
 /**
@@ -34,6 +36,8 @@ public class SummaryConversationFactory implements ConversationFactory{
     private final SystemPromptTemplate SUMMARIZER_SYSTEM_PROMPT_TEMPLATE;
     private final PromptTemplate initSummarizerPromptTemplate ;
     private final PromptTemplate againSummarizerPromptTemplate ;
+    private final LongTermMemoryService longTermMemoryService;
+    private final KnowledgeService knowledgeService;
 
     // Summary场景仅使用 chatModel.call(String)，不传入ToolCallbacks，不会触发工具调用。
     @Autowired
@@ -45,8 +49,12 @@ public class SummaryConversationFactory implements ConversationFactory{
     private int batchSize;
 
     @Autowired
-    public SummaryConversationFactory(ChatMemory chatMemory) {
+    public SummaryConversationFactory(ChatMemory chatMemory,
+                                      LongTermMemoryService longTermMemoryService,
+                                      KnowledgeService knowledgeService) {
         this.chatMemory = chatMemory;
+        this.longTermMemoryService = longTermMemoryService;
+        this.knowledgeService = knowledgeService;
         SUMMARIZER_SYSTEM_PROMPT_TEMPLATE = new SystemPromptTemplate(new ClassPathResource("/prompts/system_prompt_with_summary.md", getClass()));
         this.initSummarizerPromptTemplate = PromptTemplate.builder()
                 .renderer(StTemplateRenderer.builder().startDelimiterToken('$').endDelimiterToken('$').build())
@@ -74,6 +82,8 @@ public class SummaryConversationFactory implements ConversationFactory{
                 .batchSize(batchSize)
                 .chatMemory(chatMemory)
                 .chatModel(chatModel)
+                .longTermMemoryService(longTermMemoryService)
+                .knowledgeService(knowledgeService)
                 .initSummarizerPromptTemplate(initSummarizerPromptTemplate)
                 .againSummarizerPromptTemplate(againSummarizerPromptTemplate)
                 .build();

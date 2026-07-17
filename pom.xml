@@ -63,6 +63,7 @@
         <sherpa-onnx-api.version>1.0.1</sherpa-onnx-api.version>
         <sherpa-onnx.version>1.12.21</sherpa-onnx.version>
         <jlayer.version>1.0.1</jlayer.version>
+        <tika.version>3.2.3</tika.version>
     </properties>
 
     <dependencyManagement>
@@ -213,6 +214,21 @@
                 <groupId>com.squareup.okhttp3</groupId>
                 <artifactId>okhttp</artifactId>
                 <version>${okhttp.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parser-pdf-module</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parser-microsoft-module</artifactId>
+                <version>${tika.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.squareup.okhttp3</groupId>

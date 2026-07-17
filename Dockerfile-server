@@ -113,7 +113,7 @@ if [ -f /app/app_version.env ]; then\n\
   . /app/app_version.env\n\
 fi\n\
 echo "Starting xiaozhi-server ${APP_VERSION}"\n\
-java -Xms512m -Xmx1024m \\\n\
+java ${JAVA_OPTS:--Xms512m -Xmx1024m} \\\n\
   -Dsherpa_onnx.native.path=/app/lib \\\n\
   -Djava.library.path=/app/lib \\\n\
   -jar /app/xiaozhi-server-${APP_VERSION}.jar\n\
@@ -134,7 +134,7 @@ if [ -f /app/app_version.env ]; then\n\
   . /app/app_version.env\n\
 fi\n\
 echo "Starting xiaozhi-dialogue ${APP_VERSION}"\n\
-java -Xms512m -Xmx1024m \\\n\
+java ${JAVA_OPTS:--Xms512m -Xmx1024m} \\\n\
   -Dsherpa_onnx.native.path=/app/lib \\\n\
   -Djava.library.path=/app/lib \\\n\
   -jar /app/xiaozhi-dialogue-${APP_VERSION}-exec.jar\n\

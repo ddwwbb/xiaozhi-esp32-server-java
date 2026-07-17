@@ -57,11 +57,12 @@ public final class UserMessageAssembler {
         MessageMetadataBO bo = meta != null && meta.get(MessageMetadataBO.METADATA_KEY) instanceof MessageMetadataBO b
                 ? b : null;
         String emotion = bo != null ? bo.getEmotion() : null;
-        if (timestamp == null && !StringUtils.hasText(emotion)) {
+        String speaker = bo != null ? bo.getSpeakerName() : null;
+        if (timestamp == null && !StringUtils.hasText(emotion) && !StringUtils.hasText(speaker)) {
             return um;
         }
         return UserMessage.builder()
-                .text(assemble(um.getText(), timestamp, emotion))
+                .text(assemble(um.getText(), timestamp, speaker, emotion))
                 .metadata(meta == null ? new HashMap<>() : new HashMap<>(meta))
                 .build();
     }
@@ -70,10 +71,17 @@ public final class UserMessageAssembler {
      * 低阶：纯字符串拼接，外部一般不直接用。
      */
     public static String assemble(String text, Instant timestamp, String emotion) {
+        return assemble(text, timestamp, null, emotion);
+    }
+
+    public static String assemble(String text, Instant timestamp, String speaker, String emotion) {
         StringBuilder sb = new StringBuilder();
         if (timestamp != null) {
             LocalDateTime ldt = LocalDateTime.ofInstant(timestamp, ZoneId.systemDefault());
             sb.append('[').append(ldt.format(TIMESTAMP_FORMATTER)).append(']');
+        }
+        if (StringUtils.hasText(speaker)) {
+            sb.append("[说话人:").append(speaker).append(']');
         }
         if (StringUtils.hasText(emotion)) {
             sb.append('[').append(emotion).append(']');
